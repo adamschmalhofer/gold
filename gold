@@ -10,7 +10,7 @@ Then assign bounties to some tasks:
     task +university modify bounty:10
 
 When you complete tasks with a bounty and run `gold`, it will count the gold
-you gaine since you last ran it and add the balance to your account (~/.gold).
+you gained since you last ran it and add it to your account (~/.gold).
 
 You can use the gold to buy rewards with `gold --buy <rewardname>`
 
