@@ -1,0 +1,55 @@
+#!/usr/bin/python
+
+from argparse import ArgumentParser
+import sys, os.path
+from os.path import *
+from subprocess import *
+
+# CONSTANTS
+FNAME_COLLECTED = expanduser("~/.gold_collected")
+FNAME_GOLD = expanduser("~/.gold")
+QUERY_GETALL = "rc.context= status:completed bounty.any: _uuids"
+QUERY_GETATTR = "_get {uuid}.{attr}"
+
+# ARGUMENTS
+ap = ArgumentParser(description=__doc__)
+ap.add_argument("--reset", action="store_true")
+opt = ap.parse_args()
+
+if opt.reset:
+    os.unlink(FNAME_COLLECTED)
+    os.unlink(FNAME_GOLD)
+    print("resetting gold...")
+    sys.exit()
+
+# LIB
+def task(query, *args, **kwds):
+    return getoutput("task " + query.format(*args, **kwds))
+
+def attr(uuid, attr):
+    return task(QUERY_GETATTR, uuid=uuid, attr=attr)
+
+# DATA COLLECTION
+try:
+    have_uuids = set(open(FNAME_COLLECTED, "r").read().rstrip().split("\n"))
+except FileNotFoundError:
+    have_uuids = set()
+try:
+    gold = int(open(FNAME_GOLD, "r").read())
+except FileNotFoundError:
+    gold = 0
+current_uuids = set(task(QUERY_GETALL).split("\n"))
+
+# LOGIC
+new_uuids = current_uuids - have_uuids
+for uuid in new_uuids:
+    bounty = int(attr(uuid, "bounty"))
+    name = attr(uuid, "description")
+    print("\033[0;38;5;46m+{bounty} gold for completing `{name}`\033[0m".format(bounty=bounty, name=name))
+    gold += bounty
+
+print("\033[1;38;5;214mGold: %d\033[0m" % gold)
+
+# DATA STORAGE
+open(FNAME_COLLECTED, "w").write("\n".join(current_uuids | have_uuids))
+open(FNAME_GOLD, "w").write(str(gold) + "\n")
