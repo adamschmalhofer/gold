@@ -12,7 +12,7 @@ Then assign bounties to some tasks:
 When you complete tasks with a bounty and run `gold`, it will count the gold
 you gained since you last ran it and add it to your account (~/.gold).
 
-You can use the gold to buy rewards with `gold --buy <rewardname>`
+You can use the gold to buy rewards with `gold <rewardname>`
 
 Format of ~/.gold_rewards.csv: NAME[string],COST[int]
 """
@@ -30,6 +30,7 @@ FNAME_REWARDS = expanduser("~/.gold_rewards.csv")
 FNAME_REWARDHISTORY = expanduser("~/.gold_history.csv")
 QUERY_GETALL = "rc.context= status:completed bounty.any: _uuids"
 QUERY_GETATTR = "_get {uuid}.{attr}"
+EDITOR = os.environ.get("EDITOR", "vim")
 
 # LIB
 def task(query, *args, **kwds):
@@ -50,10 +51,16 @@ def get_rewards():
 
 # ARGUMENTS
 ap = ArgumentParser(description=__doc__.split("\n")[1])
-ap.add_argument("--reset", action="store_true")
-ap.add_argument("--force", "-f", action="store_true")
-ap.add_argument("--edit", "-e", action="store_true")
-ap.add_argument("--buy", "-b", type=str)
+ap.add_argument("--reset", action="store_true",
+    help="remove the ~/.gold and ~/.gold_collected files")
+ap.add_argument("--force", "-f", action="store_true",
+    help="buy it even if it means going below 0 gold")
+ap.add_argument("--edit", "-e", action="store_true",
+    help="edit the rewards")
+ap.add_argument("--history", action="store_true",
+    help="edit the transaction history")
+ap.add_argument("reward", type=str, nargs='?',
+    help="specify any string as argument to buy that reward")
 opt = ap.parse_args()
 
 if opt.reset:
@@ -62,7 +69,10 @@ if opt.reset:
     print("resetting gold...")
     sys.exit()
 if opt.edit:
-    call(['vim', FNAME_REWARDS])
+    call([EDITOR, FNAME_REWARDS])
+    sys.exit()
+if opt.history:
+    call([EDITOR, FNAME_REWARDHISTORY])
     sys.exit()
 
 # DATA COLLECTION
@@ -77,7 +87,7 @@ except FileNotFoundError:
 current_uuids = set(task(QUERY_GETALL).split("\n"))
 
 # LOGIC
-if not opt.buy:
+if not opt.reward:
     try:
         items = list(get_rewards().items())
     except FileNotFoundError:
@@ -97,10 +107,10 @@ for uuid in new_uuids:
     print("\033[0;38;5;46m+{bounty} gold for completing `{name}`\033[0m".format(bounty=bounty, name=name))
     gold += bounty
 
-if opt.buy:
+if opt.reward:
     rewards = get_rewards()
-    if opt.buy in rewards:
-        thing = rewards[opt.buy]
+    if opt.reward in rewards:
+        thing = rewards[opt.reward]
         cost = int(thing['cost'])
         if gold < cost and not opt.force:
             print("Not enough money for {name}!".format(**thing))
@@ -112,7 +122,7 @@ if opt.buy:
             fmt = "{date},{name},{cost}\n"
             open(FNAME_REWARDHISTORY, "a").write(fmt.format(date=time.strftime("%x %X"), **thing))
     else:
-        print("No such reward: {name}!".format(name=opt.buy))
+        print("No such reward: {name}!".format(name=opt.reward))
 
 print("\033[1;38;5;214mGold: %d\033[0m" % gold)
 
