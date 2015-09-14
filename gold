@@ -17,6 +17,7 @@ You can use the gold to buy rewards with `gold --buy <rewardname>`
 Format of ~/.gold_rewards.csv: NAME[string],COST[int]
 """
 
+import time
 from argparse import ArgumentParser
 import sys, os.path, csv
 from os.path import *
@@ -26,6 +27,7 @@ from subprocess import *
 FNAME_COLLECTED = expanduser("~/.gold_collected")
 FNAME_GOLD = expanduser("~/.gold")
 FNAME_REWARDS = expanduser("~/.gold_rewards.csv")
+FNAME_REWARDHISTORY = expanduser("~/.gold_history.csv")
 QUERY_GETALL = "rc.context= status:completed bounty.any: _uuids"
 QUERY_GETATTR = "_get {uuid}.{attr}"
 
@@ -42,7 +44,7 @@ def get_rewards():
     except FileNotFoundError:
         return dict()
     else:
-        result = dict((entry[0], dict(cost=entry[1])) for entry in csv.reader(f))
+        result = dict((entry[0], dict(name=entry[0], cost=entry[1])) for entry in csv.reader(f))
         f.close()
         return result
 
@@ -75,16 +77,18 @@ except FileNotFoundError:
 current_uuids = set(task(QUERY_GETALL).split("\n"))
 
 # LOGIC
-try:
-    items = list(get_rewards().items())
-except FileNotFoundError:
-    pass
-else:
-    fmt = "{cost:>5} | {name}"
-    items.sort(key=lambda item: item[0])
-    items.sort(key=lambda item: int(item[1]['cost']))
-    lines = map((lambda item: fmt.format(name=item[0], **item[1])), items)
-    print("\n".join(lines))
+if not opt.buy:
+    try:
+        items = list(get_rewards().items())
+    except FileNotFoundError:
+        pass
+    else:
+        fmt = "\033[0;38;5;132m{cost:>4} gold: {name}\033[0m"
+        items.sort(key=lambda item: item[0])
+        items.sort(key=lambda item: int(item[1]['cost']))
+        lines = map((lambda item: fmt.format(**item[1])), items)
+        for line in lines:
+            print(line)
 
 new_uuids = current_uuids - have_uuids
 for uuid in new_uuids:
@@ -96,12 +100,19 @@ for uuid in new_uuids:
 if opt.buy:
     rewards = get_rewards()
     if opt.buy in rewards:
-        cost = int(rewards[opt.buy]['cost'])
+        thing = rewards[opt.buy]
+        cost = int(thing['cost'])
         if gold < cost and not opt.force:
-            print("Not enough money for {name}!".format(name=opt.buy))
+            print("Not enough money for {name}!".format(**thing))
         else:
             gold -= cost
-            print("Bought {name} for {cost}!".format(name=opt.buy, **rewards[opt.buy]))
+            print("Bought {name} for {cost}!".format(**thing))
+
+            # Record the transaction
+            fmt = "{date},{name},{cost}\n"
+            open(FNAME_REWARDHISTORY, "a").write(fmt.format(date=time.strftime("%x %X"), **thing))
+    else:
+        print("No such reward: {name}!".format(name=opt.buy))
 
 print("\033[1;38;5;214mGold: %d\033[0m" % gold)
 
