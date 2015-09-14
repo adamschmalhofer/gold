@@ -1,26 +1,16 @@
 #!/usr/bin/python
 
 from argparse import ArgumentParser
-import sys, os.path
+import sys, os.path, csv
 from os.path import *
 from subprocess import *
 
 # CONSTANTS
 FNAME_COLLECTED = expanduser("~/.gold_collected")
 FNAME_GOLD = expanduser("~/.gold")
+FNAME_REWARDS = expanduser("~/.gold_rewards.csv")
 QUERY_GETALL = "rc.context= status:completed bounty.any: _uuids"
 QUERY_GETATTR = "_get {uuid}.{attr}"
-
-# ARGUMENTS
-ap = ArgumentParser(description=__doc__)
-ap.add_argument("--reset", action="store_true")
-opt = ap.parse_args()
-
-if opt.reset:
-    os.unlink(FNAME_COLLECTED)
-    os.unlink(FNAME_GOLD)
-    print("resetting gold...")
-    sys.exit()
 
 # LIB
 def task(query, *args, **kwds):
@@ -28,6 +18,29 @@ def task(query, *args, **kwds):
 
 def attr(uuid, attr):
     return task(QUERY_GETATTR, uuid=uuid, attr=attr)
+
+def get_rewards():
+    try:
+        f = open(FNAME_REWARDS, "r")
+    except FileNotFoundError:
+        return dict()
+    else:
+        result = dict((entry[0], dict(cost=entry[1])) for entry in csv.reader(f))
+        f.close()
+        return result
+
+# ARGUMENTS
+ap = ArgumentParser(description=__doc__)
+ap.add_argument("--reset", action="store_true")
+ap.add_argument("--force", "-f", action="store_true")
+ap.add_argument("--buy", "-b", type=str)
+opt = ap.parse_args()
+
+if opt.reset:
+    os.unlink(FNAME_COLLECTED)
+    os.unlink(FNAME_GOLD)
+    print("resetting gold...")
+    sys.exit()
 
 # DATA COLLECTION
 try:
@@ -41,12 +54,33 @@ except FileNotFoundError:
 current_uuids = set(task(QUERY_GETALL).split("\n"))
 
 # LOGIC
+try:
+    items = list(get_rewards().items())
+except FileNotFoundError:
+    pass
+else:
+    fmt = "{cost:>5} | {name}"
+    items.sort(key=lambda item: item[0])
+    items.sort(key=lambda item: int(item[1]['cost']))
+    lines = map((lambda item: fmt.format(name=item[0], **item[1])), items)
+    print("\n".join(lines))
+
 new_uuids = current_uuids - have_uuids
 for uuid in new_uuids:
     bounty = int(attr(uuid, "bounty"))
     name = attr(uuid, "description")
     print("\033[0;38;5;46m+{bounty} gold for completing `{name}`\033[0m".format(bounty=bounty, name=name))
     gold += bounty
+
+if opt.buy:
+    rewards = get_rewards()
+    if opt.buy in rewards:
+        cost = int(rewards[opt.buy]['cost'])
+        if gold < cost and not opt.force:
+            print("Not enough money for {name}!".format(name=opt.buy))
+        else:
+            gold -= cost
+            print("Bought {name} for {cost}!".format(name=opt.buy, **rewards[opt.buy]))
 
 print("\033[1;38;5;214mGold: %d\033[0m" % gold)
 
