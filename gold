@@ -7,7 +7,7 @@ In order for this to work, you need this in your ~/.taskrc:
     uda.bounty.type=numeric
 
 Then assign bounties to some tasks:
-    task +university modify bountry:10
+    task +university modify bounty:10
 
 When you complete tasks with a bounty and run `gold`, it will count the gold
 you gaine since you last ran it and add the balance to your account (~/.gold).
