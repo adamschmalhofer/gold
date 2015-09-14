@@ -50,6 +50,7 @@ def get_rewards():
 ap = ArgumentParser(description=__doc__.split("\n")[1])
 ap.add_argument("--reset", action="store_true")
 ap.add_argument("--force", "-f", action="store_true")
+ap.add_argument("--edit", "-e", action="store_true")
 ap.add_argument("--buy", "-b", type=str)
 opt = ap.parse_args()
 
@@ -57,6 +58,9 @@ if opt.reset:
     os.unlink(FNAME_COLLECTED)
     os.unlink(FNAME_GOLD)
     print("resetting gold...")
+    sys.exit()
+if opt.edit:
+    call(['vim', FNAME_REWARDS])
     sys.exit()
 
 # DATA COLLECTION
