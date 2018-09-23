@@ -73,16 +73,26 @@ class DotGoldStore(object):
         description = self.task_store.get_task_description(uuid)
         return Task(task_uuid, bounty, description)
 
-    def get_rewards(self):
+    def _read_rewards(self):
         try:
             f = open(self.FNAME_REWARDS, "r")
         except FileNotFoundError:
-            return dict()
+            return CsvRewardSnapshot(dict())
         else:
             result = dict((entry[0], dict(name=entry[0], cost=entry[1]))
                           for entry in csv.reader(f))
             f.close()
-            return result
+            return CsvRewardSnapshot(result)
+
+    def print_rewards(self, raw=False):
+        rewards = self._read_rewards()
+        if raw:
+            rewards.print_raw()
+        else:
+            rewards.print_pretty()
+
+    def maybe_get_reward_by_id(self, reward_id):
+        return self._read_rewards().maybe_get_by_id(reward_id)
 
     def reset(self):
         os.unlink(self.FNAME_COLLECTED)
@@ -107,10 +117,10 @@ class DotGoldStore(object):
             gold = 0
         return BountySet(have_uuids, gold)
 
-    def buy_reward(self, **thing):
+    def buy_reward(self, reward):
         fmt = "{date},{name},{cost}\n"
         open(self.FNAME_REWARDHISTORY, "a"
-             ).write(fmt.format(date=time.strftime("%x %X"), **thing))
+             ).write(fmt.format(date=time.strftime("%x %X"), **reward))
 
     def save_current_state(self, collected):
         open(self.FNAME_COLLECTED, "w").write("\n".join(collected.bounties))
@@ -131,6 +141,43 @@ class Task(object):
 
     def get_on_completion_message(self):
         self.COMPETTION_MSG.format(bounty=self.bounty, name=self.description)
+
+
+class RewardItem(object):
+    def __init__(self, name, cost):
+        self.name = name
+        self.cost = cost
+
+
+class CsvRewardSnapshot(object):
+    def __init__(self, dic):
+        self.dic = dic
+
+    def maybe_get_by_id(self, reward_id):
+        return (self.to_RewardItem(self.dic[opt.reward])
+                if opt.reward in self.dic
+                else None)
+
+    def to_RewardItem(self, thing):
+        cost = int(thing['cost'])
+        return RewardItem(thing['name'], cost)
+
+    def print_pretty(self):
+        try:
+            items = list(self.dic.items())
+        except FileNotFoundError:
+            pass
+        else:
+            fmt = "\033[0;38;5;132m{cost:>4} gold: {name}\033[0m"
+            items.sort(key=lambda item: item[0])
+            items.sort(key=lambda item: int(item[1]['cost']))
+            lines = map((lambda item: fmt.format(**item[1])), items)
+            for line in lines:
+                print(line)
+
+    def print_raw(self):
+        for reward in self.dic():
+            print(reward)
 
 
 store = DotGoldStore(TaskWarriorStore())
@@ -161,8 +208,7 @@ if opt.history:
     store.edit_history()
     sys.exit()
 if opt.list_raw:
-    for reward in store.get_rewards():
-        print(reward)
+    store.print_rewards(raw=True)
     sys.exit()
 
 collected = store.get_collected()
@@ -170,17 +216,7 @@ current_uuids = store.get_current_uids()
 
 # LOGIC
 if not opt.reward:
-    try:
-        items = list(store.get_rewards().items())
-    except FileNotFoundError:
-        pass
-    else:
-        fmt = "\033[0;38;5;132m{cost:>4} gold: {name}\033[0m"
-        items.sort(key=lambda item: item[0])
-        items.sort(key=lambda item: int(item[1]['cost']))
-        lines = map((lambda item: fmt.format(**item[1])), items)
-        for line in lines:
-            print(line)
+    store.print_rewards()
 
 new_uuids = current_uuids - collected.have_uuids
 gold = collected.gold
@@ -190,17 +226,15 @@ for uuid in new_uuids:
     gold += task.bounty
 
 if opt.reward:
-    rewards = store.get_rewards()
-    if opt.reward in rewards:
-        thing = rewards[opt.reward]
-        cost = int(thing['cost'])
-        if gold < cost and not opt.force:
-            print("Not enough money for {name}!".format(**thing))
+    reward = store.maybe_get_reward_by_id(opt.reward)
+    if reward is not None:
+        if gold < reward.cost and not opt.force:
+            print("Not enough money for {name}!".format(reward.name))
         else:
-            gold -= cost
-            print("Bought {name} for {cost}!".format(**thing))
+            gold -= reward.cost
+            print("Bought {name} for {cost}!".format(**reward))
             # Record the transaction
-            store.buy_reward(**thing)
+            store.buy_reward(reward)
     else:
         print("No such reward: {name}!".format(name=opt.reward))
 
