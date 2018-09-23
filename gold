@@ -27,6 +27,7 @@ import os.path
 import csv
 from os.path import expanduser
 from subprocess import (getoutput, call)
+from collection import namedtuple
 
 # CONSTANTS
 EDITOR = os.environ.get("EDITOR", "vim")
@@ -34,6 +35,11 @@ COMPETTION_MSG = "\033[0;38;5;46m+{bounty} gold for completing `{name}`\033[0m"
 
 
 # LIB
+
+
+BountySet = namedtuple('bounties', 'gold')
+Task = namedtuple('uuid', 'bounty', 'decription')
+RewardItem = namedtuple('name', 'cost')
 
 
 class TaskWarriorStore(object):
@@ -134,28 +140,6 @@ class DotGoldStore(object):
         open(self.FNAME_GOLD, "w").write(str(collected.gold) + "\n")
 
 
-class BountySet(object):
-    def __init__(self, bounties, gold):
-        self.bounties = bounties
-        self.gold = gold
-
-
-class Task(object):
-    def __init__(self, uuid, bounty, description):
-        self.uuid = uuid
-        self.bounty = bounty
-        self.description = description
-
-    def get_on_completion_message(self):
-        self.COMPETTION_MSG.format(bounty=self.bounty, name=self.description)
-
-
-class RewardItem(object):
-    def __init__(self, name, cost):
-        self.name = name
-        self.cost = cost
-
-
 class CsvRewardSnapshot(object):
     def __init__(self, dic):
         self.dic = dic
@@ -187,7 +171,10 @@ class CsvRewardSnapshot(object):
             print(reward)
 
 
-store = DotGoldStore(TaskWarriorStore())
+def get_on_completion_message(task):
+    COMPETTION_MSG.format(bounty=task.bounty, name=task.description)
+
+
 # ARGUMENTS
 ap = ArgumentParser(description=__doc__.split("\n")[1])
 ap.add_argument("--reset", action="store_true",
@@ -203,6 +190,8 @@ ap.add_argument("reward", type=str, nargs='?',
 ap.add_argument("--list-raw", action="store_true",
                 help="list the reward names, for tab completion scripts")
 opt = ap.parse_args()
+
+store = DotGoldStore(TaskWarriorStore())
 
 if opt.reset:
     print("resetting gold...")
@@ -226,7 +215,7 @@ if not opt.reward:
 
 def calculate_new_gold_budget(previous_state, newly_completed_tasks):
     gold = sum(task.bounty for task in previous_state)
-    print('\n'.join(task.get_on_completion_message()
+    print('\n'.join(get_on_completion_message(task)
                     for task in newly_completed_tasks))
     if opt.reward:
         reward = store.maybe_get_reward_by_id(opt.reward)
