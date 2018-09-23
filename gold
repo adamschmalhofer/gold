@@ -80,7 +80,7 @@ class DotGoldStore(object):
         previous_uuids = previous_state.bounties
         new_uuids = all_uuids - previous_uuids
         tasks = [self._get_task(t) for t in new_uuids]
-        gold = calculate_new_gold_budget(previous_state, tasks)
+        gold = calculate_new_gold_budget(previous_state.gold, tasks)
         self.save_current_state(BountySet(previous_uuids | all_uuids,
                                 gold))
 
@@ -131,7 +131,9 @@ class DotGoldStore(object):
     def buy_reward(self, reward):
         fmt = "{date},{name},{cost}\n"
         open(self.FNAME_REWARDHISTORY, "a"
-             ).write(fmt.format(date=time.strftime("%x %X"), **reward))
+             ).write(fmt.format(date=time.strftime("%x %X"),
+                                name=reward.name,
+                                cost=reward.cost))
 
     def save_current_state(self, collected):
         open(self.FNAME_COLLECTED, "w").write("\n".join(collected.bounties))
@@ -192,17 +194,19 @@ def parse_args():
 
 def calculate_new_gold_budget(previous_state, newly_completed_tasks,
                               opt, store):
-    gold = sum(task.bounty for task in previous_state)
+    gold = sum((task.bounty for task in newly_completed_tasks),
+               previous_state)
     print('\n'.join(get_on_completion_message(task)
                     for task in newly_completed_tasks))
     if opt.reward:
         reward = store.maybe_get_reward_by_id(opt.reward)
         if reward is not None:
             if gold < reward.cost and not opt.force:
-                print("Not enough money for {name}!".format(reward.name))
+                print("Not enough money for {name}!".format(name=reward.name))
             else:
                 gold -= reward.cost
-                print("Bought {name} for {cost}!".format(**reward))
+                print("Bought {name} for {cost}!".format(name=reward.name,
+                                                         cost=reward.cost))
                 # Record the transaction
                 store.buy_reward(reward)
         else:
