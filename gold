@@ -46,7 +46,7 @@ class TaskWarriorStore(object):
     def _attr(self, uuid, attr):
         return self._task(self.QUERY_GETATTR, uuid=uuid, attr=attr)
 
-    def get_current_uids(self):
+    def get_completed_tasks_with_bounty(self):
         return set(self._task(self.QUERY_GETALL).split("\n"))
 
     def get_task_bounty(self, uuid):
@@ -65,13 +65,20 @@ class DotGoldStore(object):
     def __init__(self, task_store):
         self.task_store = task_store
 
-    def get_current_uids(self):
-        return self.task_store.get_current_uids()
-
-    def get_task(self, task_uuid):
-        bounty = self.task_store.get_task_bounty(uuid)
-        description = self.task_store.get_task_description(uuid)
+    def _get_task(self, task_uuid):
+        bounty = self.task_store.get_task_bounty(task_uuid)
+        description = self.task_store.get_task_description(task_uuid)
         return Task(task_uuid, bounty, description)
+
+    def update_gold_budget(self, calculate_new_gold_budget):
+        previous_state = self.task_store.get_collected_tasks()
+        collected = self.task_store.get_completed_tasks_with_bounty()
+        current_uuids = previous_state.bounties
+        new_uuids = current_uuids - collected.have_uuids
+        tasks = [self._get_task(t) for t in new_uuids]
+        gold = calculate_new_gold_budget(previous_state, tasks)
+        self.save_current_state(BountySet(current_uuids | collected.have_uuids,
+                                gold))
 
     def _read_rewards(self):
         try:
@@ -104,7 +111,7 @@ class DotGoldStore(object):
     def edit_history(self):
         call([EDITOR, self.FNAME_REWARDHISTORY])
 
-    def get_collected(self):
+    def get_collected_tasks(self):
         # DATA COLLECTION
         try:
             have_uuids = set(open(self.FNAME_COLLECTED, "r"
@@ -211,34 +218,30 @@ if opt.list_raw:
     store.print_rewards(raw=True)
     sys.exit()
 
-collected = store.get_collected()
-current_uuids = store.get_current_uids()
 
 # LOGIC
 if not opt.reward:
     store.print_rewards()
 
-new_uuids = current_uuids - collected.have_uuids
-gold = collected.gold
-for uuid in new_uuids:
-    task = store.get_task(uuid)
-    print(task.get_on_completion_message())
-    gold += task.bounty
 
-if opt.reward:
-    reward = store.maybe_get_reward_by_id(opt.reward)
-    if reward is not None:
-        if gold < reward.cost and not opt.force:
-            print("Not enough money for {name}!".format(reward.name))
+def calculate_new_gold_budget(previous_state, newly_completed_tasks):
+    gold = sum(task.bounty for task in previous_state)
+    print('\n'.join(task.get_on_completion_message()
+                    for task in newly_completed_tasks))
+    if opt.reward:
+        reward = store.maybe_get_reward_by_id(opt.reward)
+        if reward is not None:
+            if gold < reward.cost and not opt.force:
+                print("Not enough money for {name}!".format(reward.name))
+            else:
+                gold -= reward.cost
+                print("Bought {name} for {cost}!".format(**reward))
+                # Record the transaction
+                store.buy_reward(reward)
         else:
-            gold -= reward.cost
-            print("Bought {name} for {cost}!".format(**reward))
-            # Record the transaction
-            store.buy_reward(reward)
-    else:
-        print("No such reward: {name}!".format(name=opt.reward))
+            print("No such reward: {name}!".format(name=opt.reward))
+    print("\033[1;38;5;214mGold: %d\033[0m" % gold)
+    return gold
 
-print("\033[1;38;5;214mGold: %d\033[0m" % gold)
 
-# DATA STORAGE
-store.save_current_state(BountySet(current_uuids | collected.have_uuids, gold))
+store.update_gold_budget(calculate_new_gold_budget)
