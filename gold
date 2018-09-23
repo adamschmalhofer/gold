@@ -40,20 +40,20 @@ class TaskWarriorStore(object):
     QUERY_GETALL = "rc.context= status:completed bounty.any: _uuids"
     QUERY_GETATTR = "_get {uuid}.{attr}"
 
-    def task(self, query, *args, **kwds):
+    def _task(self, query, *args, **kwds):
         return getoutput("task " + query.format(*args, **kwds))
 
-    def attr(self, uuid, attr):
-        return self.task(self.QUERY_GETATTR, uuid=uuid, attr=attr)
+    def _attr(self, uuid, attr):
+        return self._task(self.QUERY_GETATTR, uuid=uuid, attr=attr)
 
     def get_current_uids(self):
-        return set(self.task(self.QUERY_GETALL).split("\n"))
+        return set(self._task(self.QUERY_GETALL).split("\n"))
 
     def get_task_bounty(self, uuid):
-        return int(self.attr(uuid, "bounty"))
+        return int(self._attr(uuid, "bounty"))
 
     def get_task_description(self, uuid):
-        return self.attr(uuid, "description")
+        return self._attr(uuid, "description")
 
 
 class DotGoldStore(object):
