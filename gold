@@ -29,19 +29,31 @@ from os.path import expanduser
 from subprocess import (getoutput, call)
 
 # CONSTANTS
-QUERY_GETALL = "rc.context= status:completed bounty.any: _uuids"
-QUERY_GETATTR = "_get {uuid}.{attr}"
 EDITOR = os.environ.get("EDITOR", "vim")
 COMPETTION_MSG = "\033[0;38;5;46m+{bounty} gold for completing `{name}`\033[0m"
 
 
 # LIB
-def task(query, *args, **kwds):
-    return getoutput("task " + query.format(*args, **kwds))
 
 
-def attr(uuid, attr):
-    return task(QUERY_GETATTR, uuid=uuid, attr=attr)
+class TaskWarriorStore(object):
+    QUERY_GETALL = "rc.context= status:completed bounty.any: _uuids"
+    QUERY_GETATTR = "_get {uuid}.{attr}"
+
+    def task(self, query, *args, **kwds):
+        return getoutput("task " + query.format(*args, **kwds))
+
+    def attr(self, uuid, attr):
+        return self.task(self.QUERY_GETATTR, uuid=uuid, attr=attr)
+
+    def get_current_uids(self):
+        return set(self.task(self.QUERY_GETALL).split("\n"))
+
+    def get_task_bounty(self, uuid):
+        return int(self.attr(uuid, "bounty"))
+
+    def get_task_description(self, uuid):
+        return self.attr(uuid, "description")
 
 
 class DotGoldStore(object):
@@ -49,6 +61,17 @@ class DotGoldStore(object):
     FNAME_GOLD = expanduser("~/.gold")
     FNAME_REWARDS = expanduser("~/.gold_rewards.csv")
     FNAME_REWARDHISTORY = expanduser("~/.gold_history.csv")
+
+    def __init__(self, task_store):
+        self.task_store = task_store
+
+    def get_current_uids(self):
+        return self.task_store.get_current_uids()
+
+    def get_task(self, task_uuid):
+        bounty = self.task_store.get_task_bounty(uuid)
+        description = self.task_store.get_task_description(uuid)
+        return Task(task_uuid, bounty, description)
 
     def get_rewards(self):
         try:
@@ -100,7 +123,17 @@ class BountySet(object):
         self.gold = gold
 
 
-store = DotGoldStore()
+class Task(object):
+    def __init__(self, uuid, bounty, description):
+        self.uuid = uuid
+        self.bounty = bounty
+        self.description = description
+
+    def get_on_completion_message(self):
+        self.COMPETTION_MSG.format(bounty=self.bounty, name=self.description)
+
+
+store = DotGoldStore(TaskWarriorStore())
 # ARGUMENTS
 ap = ArgumentParser(description=__doc__.split("\n")[1])
 ap.add_argument("--reset", action="store_true",
@@ -133,7 +166,7 @@ if opt.list_raw:
     sys.exit()
 
 collected = store.get_collected()
-current_uuids = set(task(QUERY_GETALL).split("\n"))
+current_uuids = store.get_current_uids()
 
 # LOGIC
 if not opt.reward:
@@ -152,10 +185,9 @@ if not opt.reward:
 new_uuids = current_uuids - collected.have_uuids
 gold = collected.gold
 for uuid in new_uuids:
-    bounty = int(attr(uuid, "bounty"))
-    name = attr(uuid, "description")
-    print(COMPETTION_MSG.format(bounty=bounty, name=name))
-    gold += bounty
+    task = store.get_task(uuid)
+    print(task.get_on_completion_message())
+    gold += task.bounty
 
 if opt.reward:
     rewards = store.get_rewards()
