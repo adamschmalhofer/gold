@@ -22,9 +22,11 @@ Add tab completions to bash with this line: (breaks on spaces in reward names!)
 
 import time
 from argparse import ArgumentParser
-import sys, os.path, csv
-from os.path import *
-from subprocess import *
+import sys
+import os.path
+import csv
+from os.path import expanduser
+from subprocess import (getoutput, call)
 
 # CONSTANTS
 FNAME_COLLECTED = expanduser("~/.gold_collected")
@@ -34,13 +36,17 @@ FNAME_REWARDHISTORY = expanduser("~/.gold_history.csv")
 QUERY_GETALL = "rc.context= status:completed bounty.any: _uuids"
 QUERY_GETATTR = "_get {uuid}.{attr}"
 EDITOR = os.environ.get("EDITOR", "vim")
+COMPETTION_MSG = "\033[0;38;5;46m+{bounty} gold for completing `{name}`\033[0m"
+
 
 # LIB
 def task(query, *args, **kwds):
     return getoutput("task " + query.format(*args, **kwds))
 
+
 def attr(uuid, attr):
     return task(QUERY_GETATTR, uuid=uuid, attr=attr)
+
 
 def get_rewards():
     try:
@@ -48,24 +54,26 @@ def get_rewards():
     except FileNotFoundError:
         return dict()
     else:
-        result = dict((entry[0], dict(name=entry[0], cost=entry[1])) for entry in csv.reader(f))
+        result = dict((entry[0], dict(name=entry[0], cost=entry[1]))
+                      for entry in csv.reader(f))
         f.close()
         return result
+
 
 # ARGUMENTS
 ap = ArgumentParser(description=__doc__.split("\n")[1])
 ap.add_argument("--reset", action="store_true",
-    help="remove the ~/.gold and ~/.gold_collected files")
+                help="remove the ~/.gold and ~/.gold_collected files")
 ap.add_argument("--force", "-f", action="store_true",
-    help="buy it even if it means going below 0 gold")
+                help="buy it even if it means going below 0 gold")
 ap.add_argument("--edit", "-e", action="store_true",
-    help="edit the rewards")
+                help="edit the rewards")
 ap.add_argument("--history", action="store_true",
-    help="edit the transaction history")
+                help="edit the transaction history")
 ap.add_argument("reward", type=str, nargs='?',
-    help="specify any string as argument to buy that reward")
+                help="specify any string as argument to buy that reward")
 ap.add_argument("--list-raw", action="store_true",
-    help="list the reward names, for tab completion scripts")
+                help="list the reward names, for tab completion scripts")
 opt = ap.parse_args()
 
 if opt.reset:
@@ -113,7 +121,7 @@ new_uuids = current_uuids - have_uuids
 for uuid in new_uuids:
     bounty = int(attr(uuid, "bounty"))
     name = attr(uuid, "description")
-    print("\033[0;38;5;46m+{bounty} gold for completing `{name}`\033[0m".format(bounty=bounty, name=name))
+    print(COMPETTION_MSG.format(bounty=bounty, name=name))
     gold += bounty
 
 if opt.reward:
@@ -129,7 +137,8 @@ if opt.reward:
 
             # Record the transaction
             fmt = "{date},{name},{cost}\n"
-            open(FNAME_REWARDHISTORY, "a").write(fmt.format(date=time.strftime("%x %X"), **thing))
+            open(FNAME_REWARDHISTORY, "a"
+                 ).write(fmt.format(date=time.strftime("%x %X"), **thing))
     else:
         print("No such reward: {name}!".format(name=opt.reward))
 
