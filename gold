@@ -27,7 +27,7 @@ import os.path
 import csv
 from os.path import expanduser
 from subprocess import (getoutput, call)
-from collection import namedtuple
+from collections import namedtuple
 from functools import partial
 
 # CONSTANTS
@@ -35,9 +35,9 @@ EDITOR = os.environ.get("EDITOR", "vim")
 COMPETTION_MSG = "\033[0;38;5;46m+{bounty} gold for completing `{name}`\033[0m"
 
 
-BountySet = namedtuple('bounties', 'gold')
-Task = namedtuple('uuid', 'bounty', 'decription')
-RewardItem = namedtuple('name', 'cost')
+BountySet = namedtuple('BountySet', ['bounties', 'gold'])
+Task = namedtuple('Task', ['uuid', 'bounty', 'decription'])
+RewardItem = namedtuple('RewardItem', ['name', 'cost'])
 
 
 class TaskWarriorStore(object):
