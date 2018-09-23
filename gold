@@ -75,13 +75,13 @@ class DotGoldStore(object):
         return Task(task_uuid, bounty, description)
 
     def update_gold_budget(self, calculate_new_gold_budget):
-        previous_state = self.task_store.get_collected_tasks()
-        collected = self.task_store.get_completed_tasks_with_bounty()
-        current_uuids = previous_state.bounties
-        new_uuids = current_uuids - collected.have_uuids
+        previous_state = self.get_collected_tasks()
+        all_uuids = self.task_store.get_completed_tasks_with_bounty()
+        previous_uuids = previous_state.bounties
+        new_uuids = all_uuids - previous_uuids
         tasks = [self._get_task(t) for t in new_uuids]
         gold = calculate_new_gold_budget(previous_state, tasks)
-        self.save_current_state(BountySet(current_uuids | collected.have_uuids,
+        self.save_current_state(BountySet(previous_uuids | all_uuids,
                                 gold))
 
     def _read_rewards(self):
