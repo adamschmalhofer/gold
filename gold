@@ -28,13 +28,11 @@ import csv
 from os.path import expanduser
 from subprocess import (getoutput, call)
 from collection import namedtuple
+from functools import partial
 
 # CONSTANTS
 EDITOR = os.environ.get("EDITOR", "vim")
 COMPETTION_MSG = "\033[0;38;5;46m+{bounty} gold for completing `{name}`\033[0m"
-
-
-# LIB
 
 
 BountySet = namedtuple('bounties', 'gold')
@@ -145,8 +143,8 @@ class CsvRewardSnapshot(object):
         self.dic = dic
 
     def maybe_get_by_id(self, reward_id):
-        return (self.to_RewardItem(self.dic[opt.reward])
-                if opt.reward in self.dic
+        return (self.to_RewardItem(self.dic[reward_id])
+                if reward_id in self.dic
                 else None)
 
     def to_RewardItem(self, thing):
@@ -175,45 +173,25 @@ def get_on_completion_message(task):
     COMPETTION_MSG.format(bounty=task.bounty, name=task.description)
 
 
-# ARGUMENTS
-ap = ArgumentParser(description=__doc__.split("\n")[1])
-ap.add_argument("--reset", action="store_true",
-                help="remove the ~/.gold and ~/.gold_collected files")
-ap.add_argument("--force", "-f", action="store_true",
-                help="buy it even if it means going below 0 gold")
-ap.add_argument("--edit", "-e", action="store_true",
-                help="edit the rewards")
-ap.add_argument("--history", action="store_true",
-                help="edit the transaction history")
-ap.add_argument("reward", type=str, nargs='?',
-                help="specify any string as argument to buy that reward")
-ap.add_argument("--list-raw", action="store_true",
-                help="list the reward names, for tab completion scripts")
-opt = ap.parse_args()
-
-store = DotGoldStore(TaskWarriorStore())
-
-if opt.reset:
-    print("resetting gold...")
-    store.reset()
-    sys.exit()
-if opt.edit:
-    store.edit_rewards()
-    sys.exit()
-if opt.history:
-    store.edit_history()
-    sys.exit()
-if opt.list_raw:
-    store.print_rewards(raw=True)
-    sys.exit()
+def parse_args():
+    ap = ArgumentParser(description=__doc__.split("\n")[1])
+    ap.add_argument("--reset", action="store_true",
+                    help="remove the ~/.gold and ~/.gold_collected files")
+    ap.add_argument("--force", "-f", action="store_true",
+                    help="buy it even if it means going below 0 gold")
+    ap.add_argument("--edit", "-e", action="store_true",
+                    help="edit the rewards")
+    ap.add_argument("--history", action="store_true",
+                    help="edit the transaction history")
+    ap.add_argument("reward", type=str, nargs='?',
+                    help="specify any string as argument to buy that reward")
+    ap.add_argument("--list-raw", action="store_true",
+                    help="list the reward names, for tab completion scripts")
+    return ap.parse_args()
 
 
-# LOGIC
-if not opt.reward:
-    store.print_rewards()
-
-
-def calculate_new_gold_budget(previous_state, newly_completed_tasks):
+def calculate_new_gold_budget(previous_state, newly_completed_tasks,
+                              opt, store):
     gold = sum(task.bounty for task in previous_state)
     print('\n'.join(get_on_completion_message(task)
                     for task in newly_completed_tasks))
@@ -233,4 +211,30 @@ def calculate_new_gold_budget(previous_state, newly_completed_tasks):
     return gold
 
 
-store.update_gold_budget(calculate_new_gold_budget)
+def main():
+    store = DotGoldStore(TaskWarriorStore())
+    opt = parse_args()
+
+    if opt.reset:
+        print("resetting gold...")
+        store.reset()
+        sys.exit()
+    if opt.edit:
+        store.edit_rewards()
+        sys.exit()
+    if opt.history:
+        store.edit_history()
+        sys.exit()
+    if opt.list_raw:
+        store.print_rewards(raw=True)
+        sys.exit()
+
+    if not opt.reward:
+        store.print_rewards()
+    on_calculate_new_gold_budget = partial(calculate_new_gold_budget,
+                                           opt=opt, store=store)
+    store.update_gold_budget(on_calculate_new_gold_budget)
+
+
+if __name__ == '__main__':
+    main()
